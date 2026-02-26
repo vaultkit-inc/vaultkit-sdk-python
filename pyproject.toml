@@ -1,54 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vaultkit"
 version = "0.1.0"
-description = "VaultKit Python SDK for governed data access and AI agent integration"
-readme = "README.md"
-requires-python = ">=3.9"
-
+description = "VaultKit Python SDK for policy-driven, runtime governed data access"
 authors = [
-  { name = "VaultKit Inc." }
+  { name = "VaultKit", email = "founders@vaultkit.io" }
 ]
-
+readme = "README.md"
+requires-python = ">=3.8"
 license = { text = "MIT" }
 
-keywords = ["data-governance", "ai", "sdk", "security", "data-access"]
+dependencies = [
+  "httpx>=0.24.0",
+]
+
+keywords = [
+  "ai",
+  "data",
+  "sdk",
+  "governance",
+  "security",
+  "agents",
+  "runtime",
+]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Topic :: Software Development :: Libraries :: Python Modules",
-]
-
-dependencies = [
-  "httpx>=0.25,<1.0"
+  "Topic :: Software Development :: Libraries",
 ]
 
 [project.urls]
-Homepage = "https://vaultkit.io"
+Homepage = "https://github.com/vaultkit-inc/vaultkit-sdk-python"
 Documentation = "https://docs.vaultkit.io"
-Repository = "https://github.com/vaultkit/vaultkit-python"
-
-# Optional but recommended for development
-[project.optional-dependencies]
-dev = [
-  "pytest",
-  "pytest-cov",
-  "black",
-  "ruff",
-  "mypy"
-]
-
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-# Ensure all vaultkit modules are included in the package
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["vaultkit*"]
+Source = "https://github.com/vaultkit-inc/vaultkit-sdk-python"
+Issues = "https://github.com/vaultkit-inc/vaultkit-sdk-python/issues"
