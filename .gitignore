@@ -1,36 +1,53 @@
-# Byte-compiled / optimized
+
+# Python
+
 __pycache__/
 *.py[cod]
 *$py.class
 
+
 # Virtual environments
+
 .venv/
 venv/
 env/
-ENV/
+.publish-env/
 
-# Distribution / packaging
+
+# Build / packaging
+
 build/
 dist/
 *.egg-info/
 .eggs/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
 
-# Test / coverage
+# Testing / coverage
+
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
 
+
 # Type checkers
+
 .mypy_cache/
 .pyre/
 .pytype/
 
-# IDE / Editor
+
+# Environment / secrets
+
+.env
+.env.*
+
+# Logs / temp
+*.log
+tmp/
+temp/
+
+# IDE / editor
 .vscode/
 .idea/
 *.swp
@@ -40,18 +57,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# dotenv / secrets
-.env
-.env.*
-
-# Logs
-*.log
-
-# Temporary files
-tmp/
-temp/
-
+# Jupyter
 .ipynb_checkpoints/
 
-# Local config overrides
+# Local overrides
 config.local.*
