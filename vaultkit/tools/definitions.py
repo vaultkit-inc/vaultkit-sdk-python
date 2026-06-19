@@ -63,13 +63,16 @@ def query_tool_def(
         }
 
     # Field guidance
-    fields_desc = "Columns to retrieve. Omit to return all accessible columns."
+    fields_desc = (
+        "Columns to retrieve. MUST be valid fields for the selected dataset. "
+        "Do NOT invent or guess field names. Only use fields listed below."
+    )
     if schema_hints:
-        examples = []
-        for ds, fields in list(schema_hints.items())[:2]:
-            examples.append(f"{ds}: [{', '.join(fields[:5])}]")
-        if examples:
-            fields_desc += f" Example fields — {'; '.join(examples)}."
+        field_rules = []
+        for ds, fields in list(schema_hints.items())[:5]:
+            field_rules.append(f"{ds}: {', '.join(fields)}")
+
+        fields_desc += "\n\nVALID FIELDS BY DATASET:\n" + "\n".join(field_rules)
 
     filter_condition = {
         "type": "object",

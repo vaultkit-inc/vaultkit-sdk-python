@@ -1,16 +1,5 @@
 """
-VaultKit AI Agent Demo (Production)
-
-This version is optimized for:
-- demos
-- real-world agent behavior
-
-Key upgrades:
-- no exception leakage from executor
-- approval flow handling
-- clearer logs
-- discover-first bias
-- resilient loop
+VaultKit AI Agent Demo
 """
 
 import json
@@ -56,15 +45,39 @@ STRICT RULES:
 - NEVER invent datasets or fields
 - If approval is required, explain clearly and guide the user
 
+OUTPUT FORMAT:
+- ALWAYS present data results as a markdown table
+
 GOAL:
 Safely retrieve and analyze governed data.
 """
 
-
 MAX_STEPS = 10
 
 
-# Agent Loop
+def format_result(result: dict) -> None:
+    status = result.get("status")
+
+    if status in ("ok", "approved"):
+        rows = result.get("data") or result.get("rows", [])
+        masked = result.get("masked_fields", [])
+        print(f"\n  ✅ {len(rows)} row(s) retrieved", end="")
+        print()
+
+    elif status == "denied":
+        print(f"\n  🚫 Access denied — {result.get('reason', 'Policy violation')}")
+
+    elif status == "error":
+        print(f"\n  ⚠️  {result.get('message', 'Unknown error')}")
+
+
+def format_tool_call(name: str, args: dict) -> None:
+    if name == "vaultkit_discover":
+        print(f"\n  🔍 Discovering datasets...")
+    elif name == "vaultkit_query":
+        dataset = args.get("dataset", "unknown")
+        print(f"\n  📋 Querying {dataset}...")
+
 
 def run_agent(user_message: str) -> str:
     messages = [
@@ -72,10 +85,11 @@ def run_agent(user_message: str) -> str:
         {"role": "user", "content": user_message},
     ]
 
-    print("\n Starting VaultKit Agent\n")
+    print("\n" + "─" * 60)
+    print("  VaultKit Agent")
+    print("─" * 60)
 
     for step in range(MAX_STEPS):
-        print(f"\n STEP {step + 1}")
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -87,10 +101,12 @@ def run_agent(user_message: str) -> str:
         msg = response.choices[0].message
         messages.append(msg.model_dump())
 
-        # Final answer
         if not msg.tool_calls:
-            print("\n FINAL ANSWER\n")
-            print(msg.content)
+            print("\n" + "─" * 60)
+            print("  Agent Response")
+            print("─" * 60)
+            print(f"\n{msg.content}")
+            print()
             return msg.content or ""
 
         for tool_call in msg.tool_calls:
@@ -99,38 +115,53 @@ def run_agent(user_message: str) -> str:
             except Exception:
                 args = {}
 
-            print(f" TOOL CALL → {tool_call.function.name}")
-            print(f" ARGS      → {args}")
+            format_tool_call(tool_call.function.name, args)
 
             result = executor.execute(tool_call.function.name, args)
 
-            print(f" RESULT    → {result}")
+            format_result(result)
 
-            # Approval flow (key differentiator)
             if result.get("status") == "pending_approval":
                 request_id = result.get("request_id")
 
-                print("\n Approval required. Simulating wait...\n")
-                time.sleep(2)
+                print(f"\n  ⏳ Waiting for human approval...")
+                print(f"  Run: vkit approval:approve {request_id}")
 
-                check = executor.execute(
-                    "vaultkit_check_approval",
-                    {"request_id": request_id},
-                )
+                max_wait = 120
+                interval = 5
+                elapsed = 0
 
-                print(f" APPROVAL CHECK → {check}")
+                while elapsed < max_wait:
+                    time.sleep(interval)
+                    elapsed += interval
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(check),
-                })
+                    check = executor.execute(
+                        "vaultkit_check_approval",
+                        {"request_id": request_id},
+                    )
+
+                    if check.get("status") in ("approved", "denied"):
+                        format_result(check)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": json.dumps(check),
+                        })
+                        break
+                else:
+                    timeout_msg = {
+                        "status": "error",
+                        "message": "Approval timed out after 2 minutes.",
+                    }
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps(timeout_msg),
+                    })
 
                 continue
 
-            # Retry simple transient errors
             if result.get("status") == "error":
-                print("⚠️  Retrying step...")
                 continue
 
             messages.append({
@@ -139,14 +170,15 @@ def run_agent(user_message: str) -> str:
                 "content": json.dumps(result),
             })
 
-    return "⚠️ Agent stopped after max steps."
+    return "  Agent stopped after max steps."
 
-
-# Run
 
 if __name__ == "__main__":
-    print(
-        run_agent(
-            "Find users signup source in the last 7 days and summarize activity trends"
-        )
-    )
+    print("\n  VaultKit — Runtime Governance for AI Agents")
+    print("  docs.vaultkit.io\n")
+
+    while True:
+        question = input("Ask the agent (or 'quit' to exit): ")
+        if question.lower() == "quit":
+            break
+        run_agent(question)
