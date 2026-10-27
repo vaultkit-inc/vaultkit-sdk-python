@@ -108,3 +108,30 @@ def test_check_approval_tool_def_structure():
     assert schema["type"] == "object"
     assert "request_id" in schema["properties"]
     assert "request_id" in schema["required"]
+
+
+def test_query_tool_def_advertises_analytics():
+    props = query_tool_def()["input_schema"]["properties"]
+
+    aggregates = props["aggregates"]
+    assert aggregates["type"] == "array"
+    assert aggregates["items"]["properties"]["func"]["enum"] == ["count", "sum", "avg", "min", "max"]
+    assert aggregates["items"]["required"] == ["func", "field"]
+
+    assert props["group_by"]["items"] == {"type": "string"}
+
+    having = props["having"]["items"]
+    assert having["properties"]["operator"]["enum"] == ["gt", "lt", "eq", "gte", "lte"]
+    assert having["required"] == ["field", "operator", "value"]
+
+    order_by = props["order_by"]
+    assert order_by["properties"]["direction"]["enum"] == ["asc", "desc"]
+    assert order_by["required"] == ["column"]
+
+
+def test_query_tool_def_keeps_dataset_as_the_only_required_input():
+    assert query_tool_def()["input_schema"]["required"] == ["dataset"]
+
+
+def test_query_tool_def_says_joins_are_not_supported():
+    assert "joins are not supported" in query_tool_def()["description"]

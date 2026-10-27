@@ -19,7 +19,11 @@ from vaultkit.models.query_result import QueryResult
 from vaultkit.utils.retry import RetryConfig, with_retries
 from vaultkit.utils.validation import (
     require_str,
+    validate_aggregates,
     validate_filters,
+    validate_group_by,
+    validate_having,
+    validate_order_by,
     validate_limit,
 )
 
@@ -98,6 +102,10 @@ class VaultKitClient:
         fields: Optional[List[str]] = None,
         filters: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
+        aggregates: Optional[List[Dict[str, Any]]] = None,
+        group_by: Optional[List[str]] = None,
+        having: Optional[List[Dict[str, Any]]] = None,
+        order_by: Optional[Dict[str, Any]] = None,
         purpose: Optional[str] = None,
         requester_region: Optional[str] = None,
         requester_clearance: Optional[str] = None,
@@ -105,6 +113,18 @@ class VaultKitClient:
     ) -> FetchResult:
         """
         Submit an intent request and return data — full grant lifecycle internal.
+
+        Analytical queries (single dataset, no joins):
+            aggregates  [{"func": "sum", "field": "amount", "alias": "total"}]
+                        func is one of count, sum, avg, min, max; "*" only with count.
+            group_by    ["region"] — every field in `fields` must be listed when given.
+            having      [{"field": "SUM(amount)", "operator": "gt", "value": 1000}]
+                        field must be an aggregate expression, not an alias.
+            order_by    {"column": "total", "direction": "desc"}
+
+        `fields` may be omitted when `aggregates` is given (e.g. a single COUNT(*)).
+        Requires a control plane that supports intent analytics; older ones
+        ignore these parameters.
 
         Raises:
             DeniedError             Policy rejected. Do not retry.
@@ -126,6 +146,10 @@ class VaultKitClient:
             fields=fields,
             filters=filters,
             limit=limit,
+            aggregates=aggregates,
+            group_by=group_by,
+            having=having,
+            order_by=order_by,
             purpose=purpose,
             requester_region=requester_region,
             requester_clearance=requester_clearance,
@@ -214,6 +238,10 @@ class VaultKitClient:
         fields: Optional[List[str]] = None,
         filters: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
+        aggregates: Optional[List[Dict[str, Any]]] = None,
+        group_by: Optional[List[str]] = None,
+        having: Optional[List[Dict[str, Any]]] = None,
+        order_by: Optional[Dict[str, Any]] = None,
         purpose: Optional[str] = None,
         requester_region: Optional[str] = None,
         requester_clearance: Optional[str] = None,
@@ -223,6 +251,10 @@ class VaultKitClient:
         dataset = require_str("dataset", dataset)
         limit = validate_limit(limit)
         filters = validate_filters(filters)
+        aggregates = validate_aggregates(aggregates)
+        group_by = validate_group_by(group_by)
+        having = validate_having(having)
+        order_by = validate_order_by(order_by)
 
         req: Dict[str, Any] = {"dataset": dataset}
         body: Dict[str, Any] = {"request": req}
@@ -235,6 +267,14 @@ class VaultKitClient:
             req["purpose"] = str(purpose)
         if filters is not None:
             req["filters"] = filters
+        if aggregates is not None:
+            req["aggregates"] = aggregates
+        if group_by is not None:
+            req["group_by"] = group_by
+        if having is not None:
+            req["having"] = having
+        if order_by is not None:
+            req["order_by"] = order_by
         if requester_region is not None:
             body["requester_region"] = requester_region
         if requester_clearance is not None:
@@ -248,6 +288,7 @@ class VaultKitClient:
                     "poll": poll,
                     "has_fields": fields is not None,
                     "has_filters": filters is not None,
+                    "has_aggregates": aggregates is not None,
                     "limit": limit,
                 },
             )
