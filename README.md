@@ -48,6 +48,37 @@ print(result.rows)
 
 ---
 
+## Analytical Queries
+
+Aggregate, group, filter on aggregates and sort within a single dataset:
+
+```python
+result = client.execute(
+    dataset="orders",
+    fields=["region"],
+    aggregates=[{"func": "sum", "field": "amount", "alias": "total"}],
+    having=[{"field": "SUM(amount)", "operator": "gt", "value": 1000}],
+    order_by={"column": "total", "direction": "desc"},
+    limit=10,
+    purpose="Quarterly revenue by region",
+)
+# [{"region": "US", "total": 18250}, {"region": "CA", "total": 4100}, ...]
+```
+
+- `aggregates`: `func` is one of `count`, `sum`, `avg`, `min`, `max`; use `field="*"` with `count`.
+- `group_by`: optional. Defaults to `fields`; if given, it must include every entry in `fields`.
+- `having`: needs an aggregate expression such as `SUM(amount)`, not an alias.
+- `order_by`: a field, an aggregate alias or an aggregate expression, `asc` (default) or `desc`.
+- `fields` can be omitted for a single total, e.g. `aggregates=[{"func": "count", "field": "*"}]`.
+
+Policies apply to every field these clauses use. `min`/`max`/`sum`/`avg` over a masked
+field are denied; `count` is allowed. Joins are not supported.
+
+> Requires a VaultKit control plane with intent analytics support. Older control
+> planes ignore these parameters and return ungrouped rows.
+
+---
+
 ## AI Agent Usage
 
 VaultKit provides built-in tools for LLM agents.

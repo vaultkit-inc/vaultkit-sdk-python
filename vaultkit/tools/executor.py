@@ -105,6 +105,10 @@ class ToolExecutor:
             fields=args.get("fields"),
             filters=args.get("filters"),
             limit=args.get("limit"),
+            aggregates=args.get("aggregates"),
+            group_by=args.get("group_by"),
+            having=args.get("having"),
+            order_by=args.get("order_by"),
             purpose=purpose,
             requester_region=args.get("requester_region") or self._default_requester_region,
         )

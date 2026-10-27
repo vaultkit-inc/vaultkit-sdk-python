@@ -198,3 +198,47 @@ def test_queued_error_translation(executor):
 
     assert res["status"] == "queued"
     assert res["request_id"] == "r1"
+
+
+def test_query_forwards_analytics_arguments(executor):
+    executor, client = executor
+
+    calls = {}
+
+    def capture(**kwargs):
+        calls.update(kwargs)
+        return DummyFetch([{"region": "US", "total": 5}])
+
+    client.execute = capture
+
+    args = {
+        "dataset": "orders",
+        "fields": ["region"],
+        "aggregates": [{"func": "sum", "field": "amount", "alias": "total"}],
+        "group_by": ["region"],
+        "having": [{"field": "SUM(amount)", "operator": "gt", "value": 1}],
+        "order_by": {"column": "total", "direction": "desc"},
+    }
+
+    res = executor.execute("vaultkit_query", args)
+
+    assert res["status"] == "ok"
+    for key in ("aggregates", "group_by", "having", "order_by"):
+        assert calls[key] == args[key]
+
+
+def test_query_without_analytics_passes_none(executor):
+    executor, client = executor
+
+    calls = {}
+
+    def capture(**kwargs):
+        calls.update(kwargs)
+        return DummyFetch([])
+
+    client.execute = capture
+
+    executor.execute("vaultkit_query", {"dataset": "orders", "fields": ["id"]})
+
+    for key in ("aggregates", "group_by", "having", "order_by"):
+        assert calls[key] is None

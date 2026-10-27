@@ -115,6 +115,8 @@ def query_tool_def(
         "description": (
             "Query a governed dataset through VaultKit. Policies are enforced automatically: "
             "sensitive fields may be masked and some datasets require approval before data is returned. "
+            "Supports aggregation (count/sum/avg/min/max), grouping, having and sorting on a single dataset; "
+            "joins are not supported. "
             "Returns data or a pending status if approval is required."
         ),
         "input_schema": {
@@ -142,6 +144,71 @@ def query_tool_def(
                     "minimum": 1,
                     "maximum": 10000,
                     "description": "Maximum number of rows to return.",
+                },
+                "aggregates": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "func": {"type": "string", "enum": ["count", "sum", "avg", "min", "max"]},
+                            "field": {
+                                "type": "string",
+                                "description": "A field of the selected dataset, or '*' with count.",
+                            },
+                            "alias": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                "description": "Name of the result column. Use it in order_by.",
+                            },
+                        },
+                        "required": ["func", "field"],
+                    },
+                    "description": (
+                        "Aggregate functions over the selected dataset. When aggregating, every entry in "
+                        "'fields' is a grouping column. 'fields' may be omitted for a single total.\n\n"
+                        "Example: [{func: 'sum', field: 'amount', alias: 'total'}]\n"
+                        "min/max/sum/avg over masked fields are denied by policy; count is allowed."
+                    ),
+                },
+                "group_by": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Fields to group by. Optional: defaults to 'fields'. If given, it must include "
+                        "every entry in 'fields'."
+                    ),
+                },
+                "having": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field": {
+                                "type": "string",
+                                "description": "An aggregate expression such as 'SUM(amount)'. Aliases are not allowed here.",
+                            },
+                            "operator": {"type": "string", "enum": ["gt", "lt", "eq", "gte", "lte"]},
+                            "value": {"type": "number"},
+                        },
+                        "required": ["field", "operator", "value"],
+                    },
+                    "description": (
+                        "Filters applied after aggregation. Requires 'aggregates'.\n\n"
+                        "Example: [{field: 'SUM(amount)', operator: 'gt', value: 1000}]"
+                    ),
+                },
+                "order_by": {
+                    "type": "object",
+                    "properties": {
+                        "column": {
+                            "type": "string",
+                            "description": "A field, an aggregate alias, or an aggregate expression.",
+                        },
+                        "direction": {"type": "string", "enum": ["asc", "desc"], "default": "asc"},
+                    },
+                    "required": ["column"],
+                    "description": "Sort order of the results.",
                 },
                 "purpose": {
                     "type": "string",
