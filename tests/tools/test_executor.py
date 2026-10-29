@@ -1,5 +1,7 @@
 import pytest
 
+from vaultkit.core.http import HttpClient
+from vaultkit.models.fetch_result import FetchResult
 from vaultkit.tools.executor import ToolExecutor
 from vaultkit.errors.exceptions import (
     ApprovalRequiredError,
@@ -45,6 +47,18 @@ class DummyFetch:
         self.masked_fields = masked_fields or []
 
 
+class _JsonResponse:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self._body = body
+        self.text = ""
+        self.headers = {}
+        self.content = b"1"
+
+    def json(self):
+        return self._body
+
+
 class DummyQueryResult:
     def __init__(self, status, grant_ref=None, reason=None):
         self.status = status
@@ -88,6 +102,8 @@ def test_discover(executor):
     assert res["count"] == 2
     assert res["datasets"][0]["visibility"] == "accessible"
     assert res["datasets"][1]["visibility"] == "not accessible"
+    # The dataset list endpoint carries no field count, so none is reported.
+    assert "field_count" not in res["datasets"][0]
 
 
 def test_query_success(executor):
@@ -114,6 +130,46 @@ def test_query_with_masked_fields(executor):
 
     assert "note" in res
     assert "email" in res["note"]
+    assert res["masked_fields"] == ["email"]
+
+
+def test_query_reports_masked_fields_from_funl_map(executor):
+    executor, client = executor
+
+    client._execute_result = FetchResult.from_dict({
+        "rows": [{"id": 1, "email": "j***@example.com"}],
+        "meta": {"masked_fields": {"email": "partial"}},
+    })
+
+    res = executor.execute("vaultkit_query", {"dataset": "users"})
+
+    assert res["masked_fields"] == ["email"]
+    assert "email" in res["note"]
+
+
+def test_query_without_masking_has_no_masked_fields(executor):
+    executor, client = executor
+
+    client._execute_result = DummyFetch([{"id": 1}])
+
+    res = executor.execute("vaultkit_query", {"dataset": "users"})
+
+    assert "masked_fields" not in res
+    assert "note" not in res
+
+
+def test_check_approval_reports_masked_fields_from_funl_map(executor):
+    executor, client = executor
+
+    client._poll_result = DummyQueryResult("granted", grant_ref="g1")
+    client._fetch_result = FetchResult.from_dict({
+        "rows": [{"id": 1}],
+        "meta": {"masked_fields": {"email": "partial"}},
+    })
+
+    res = executor.execute("vaultkit_check_approval", {"request_id": "r1"})
+
+    assert res["masked_fields"] == ["email"]
 
 
 def test_query_missing_dataset(executor):
@@ -165,7 +221,31 @@ def test_denied_error_translation(executor):
     res = executor.execute("vaultkit_query", {"dataset": "users"})
 
     assert res["status"] == "denied"
+    assert res["policy_id"] == "p1"
+    assert res["reason"] == "blocked"
     assert "policy_id=p1" in res["error"]
+
+
+def test_intent_api_denial_surfaces_reason(executor, monkeypatch):
+    executor, client = executor
+
+    http = HttpClient(base_url="http://test", token="token")
+    monkeypatch.setattr(
+        http._client,
+        "request",
+        lambda *a, **k: _JsonResponse(403, {
+            "status": "denied",
+            "policy_id": "deny_pii",
+            "reason": "PII access is not allowed for this purpose",
+        }),
+    )
+    client.execute = lambda **kwargs: http.post("/intent/requests", json_body={})
+
+    res = executor.execute("vaultkit_query", {"dataset": "users"})
+
+    assert res["status"] == "denied"
+    assert res["reason"] == "PII access is not allowed for this purpose"
+    assert res["policy_id"] == "deny_pii"
 
 
 def test_approval_required_translation(executor):

@@ -96,3 +96,23 @@ def test_is_empty_false():
     })
 
     assert result.is_empty is False
+
+
+def test_masked_fields_map_from_funl():
+    # funl sends meta.masked_fields as field -> mask method.
+    result = FetchResult.from_dict({
+        "rows": [],
+        "meta": {"masked_fields": {"email": "partial", "ssn": "full"}}
+    })
+
+    assert result.masked_fields == ["email", "ssn"]
+    assert result.masking_methods == {"email": "partial", "ssn": "full"}
+
+
+def test_masking_methods_empty_for_list():
+    result = FetchResult.from_dict({
+        "rows": [],
+        "meta": {"masked_fields": ["email"]}
+    })
+
+    assert result.masking_methods == {}

@@ -62,10 +62,12 @@ class DeniedError(VaultKitError):
         message: str,
         *,
         policy_id: Optional[str] = None,
+        reason: Optional[str] = None,
         context: Optional[ErrorContext] = None,
     ) -> None:
         super().__init__(message, context=context)
         self.policy_id = policy_id
+        self.reason = reason or message
 
 
 class QueuedError(VaultKitError):
@@ -185,10 +187,13 @@ def map_http_error(status_code: int, message: str, *, context: ErrorContext) -> 
         return AuthError(message, context=context)
 
     if status_code == 403:
-        if error_type == "policy_denied":
+        # The intent API answers a denial with {"status": "denied", "policy_id", "reason"};
+        # older backends sent {"type": "policy_denied"}.
+        if error_type == "policy_denied" or raw.get("status") == "denied":
             return DeniedError(
                 message,
                 policy_id=raw.get("policy_id"),
+                reason=raw.get("reason"),
                 context=context,
             )
         return ForbiddenError(message, context=context)
