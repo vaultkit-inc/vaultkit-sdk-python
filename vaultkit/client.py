@@ -190,6 +190,7 @@ class VaultKitClient:
             raise DeniedError(
                 result.reason or "Request denied by policy",
                 policy_id=result.policy_id,
+                reason=result.reason,
             )
 
         # Case 1: data already returned (reuse path)
@@ -315,6 +316,7 @@ class VaultKitClient:
                 raise DeniedError(
                     result.reason or "Request denied",
                     policy_id=result.policy_id,
+                    reason=result.reason,
                 )
             if result.is_pending and not poll:
                 raise QueuedError(

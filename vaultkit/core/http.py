@@ -166,6 +166,7 @@ class HttpClient:
                     raw.get("error")
                     or raw.get("message")
                     or raw.get("detail")
+                    or raw.get("reason")
                     or msg
                 )
         except Exception:

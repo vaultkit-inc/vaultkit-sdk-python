@@ -86,7 +86,6 @@ class ToolExecutor:
                     "name": d.dataset,
                     "datasource": d.datasource,
                     "visibility": visibility_map.get(getattr(d, "visibility", None), getattr(d, "visibility", None)),
-                    "field_count": len(getattr(d, "fields", []) or []),
                 }
                 for d in datasets
             ],
@@ -121,6 +120,7 @@ class ToolExecutor:
         }
 
         if result.masked_fields:
+            response["masked_fields"] = result.masked_fields
             response["note"] = f"Fields {result.masked_fields} were masked per data policy."
 
         return response
@@ -158,12 +158,17 @@ class ToolExecutor:
 
         if isinstance(exc, DeniedError):
             policy_id = getattr(exc, "policy_id", None)
+            reason = getattr(exc, "reason", None) or exc.message
             extra = f" (policy_id={policy_id})" if policy_id else ""
-            return self._error(
-                f"Access denied by VaultKit policy{extra}. Reason: {msg}. "
-                "Do not retry — this denial is deterministic.",
-                code="denied",
-            )
+            return {
+                "status": "denied",
+                "reason": reason,
+                "policy_id": policy_id,
+                "error": (
+                    f"Access denied by VaultKit policy{extra}. Reason: {reason}. "
+                    "Do not retry — this denial is deterministic."
+                ),
+            }
 
         if isinstance(exc, ApprovalRequiredError):
             return {

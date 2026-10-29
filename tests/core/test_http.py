@@ -2,7 +2,7 @@ import pytest
 import httpx
 
 from vaultkit.core.http import HttpClient
-from vaultkit.errors.exceptions import TransportError
+from vaultkit.errors.exceptions import DeniedError, ForbiddenError, TransportError
 
 
 class DummyResponse:
@@ -131,3 +131,54 @@ def test_retry_fn_used(monkeypatch):
     client.get("/test")
 
     assert called["retry"] is True
+
+
+def _client_returning(monkeypatch, status_code, body):
+    client = HttpClient(base_url="http://test", token="token")
+
+    def mock_request(*args, **kwargs):
+        return DummyResponse(status_code=status_code, json_data=body)
+
+    monkeypatch.setattr(client._client, "request", mock_request)
+    return client
+
+
+def test_intent_denial_raises_denied_error_with_reason(monkeypatch):
+    # Shape the control plane's intent API sends for a policy denial.
+    client = _client_returning(monkeypatch, 403, {
+        "status": "denied",
+        "policy_id": "deny_pii",
+        "reason": "PII access is not allowed for this purpose",
+    })
+
+    with pytest.raises(DeniedError) as exc_info:
+        client.post("/intent/requests", json_body={})
+
+    err = exc_info.value
+    assert err.policy_id == "deny_pii"
+    assert err.reason == "PII access is not allowed for this purpose"
+    assert err.message == "PII access is not allowed for this purpose"
+
+
+def test_legacy_policy_denied_type_still_raises_denied_error(monkeypatch):
+    client = _client_returning(monkeypatch, 403, {
+        "type": "policy_denied",
+        "policy_id": "p1",
+        "error": "blocked",
+    })
+
+    with pytest.raises(DeniedError) as exc_info:
+        client.post("/intent/requests", json_body={})
+
+    assert exc_info.value.policy_id == "p1"
+    assert exc_info.value.reason == "blocked"
+
+
+def test_other_403_stays_forbidden(monkeypatch):
+    client = _client_returning(monkeypatch, 403, {"error": "token lacks scope"})
+
+    with pytest.raises(ForbiddenError) as exc_info:
+        client.get("/test")
+
+    assert not isinstance(exc_info.value, DeniedError)
+    assert exc_info.value.message == "token lacks scope"

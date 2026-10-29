@@ -42,11 +42,22 @@ class FetchResult:
     @property
     def masked_fields(self) -> List[str]:
         """
-        Masked field names from meta, if your API returns them there.
+        Masked field names from meta.
+
+        funl sends meta.masked_fields as a map of field -> mask method
+        ({"email": "partial"}); a plain list of names is also accepted.
         Returns [] safely if meta is absent or has no masked_fields key.
         """
         value = (self.meta or {}).get("masked_fields")
+        if isinstance(value, dict):
+            return list(value.keys())
         return value if isinstance(value, list) else []
+
+    @property
+    def masking_methods(self) -> Dict[str, str]:
+        """Mask method per masked field, e.g. {"email": "partial"}. Empty if the API sent a list."""
+        value = (self.meta or {}).get("masked_fields")
+        return dict(value) if isinstance(value, dict) else {}
 
     @property
     def is_empty(self) -> bool:
