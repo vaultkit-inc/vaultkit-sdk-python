@@ -71,6 +71,38 @@ def test_execute_forwards_analytics_to_query(client):
         assert kwargs[key] == value
 
 
+def test_query_sends_a_time_bucket_in_group_by(client):
+    bucket = {"field": "created_at", "bucket": "quarter", "alias": "quarter", "timezone": "America/Toronto"}
+
+    client.query(
+        dataset="payments",
+        aggregates=[{"func": "count", "field": "*", "alias": "failures"}],
+        group_by=["status", bucket],
+        order_by={"column": "quarter"},
+    )
+
+    assert sent_request(client)["group_by"] == ["status", bucket]
+
+
+@pytest.mark.parametrize(
+    "bucket",
+    [
+        {"field": "created_at", "bucket": "fortnight"},
+        {"field": "created_at"},
+        {"bucket": "month"},
+        {"field": "", "bucket": "month"},
+        {"field": "created_at", "bucket": "month", "time_zone": "UTC"},
+        {"field": "created_at", "bucket": "month", "alias": ""},
+        {"field": "created_at", "bucket": "month", "timezone": 5},
+    ],
+)
+def test_query_rejects_malformed_time_buckets_before_sending(client, bucket):
+    with pytest.raises(ValidationError):
+        client.query(dataset="payments", aggregates=[{"func": "count", "field": "*"}], group_by=[bucket])
+
+    client._http.post.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

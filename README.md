@@ -67,6 +67,24 @@ result = client.execute(
 
 - `aggregates`: `func` is one of `count`, `sum`, `avg`, `min`, `max`; use `field="*"` with `count`.
 - `group_by`: optional. Defaults to `fields`; if given, it must include every entry in `fields`.
+  An entry can also be a time bucket of a timestamp or date field, which groups by period
+  (`day`, `week`, `month`, `quarter` or `year`; `alias` and `timezone` are optional, and
+  the time zone defaults to UTC). Use one bucketed query for a trend instead of one query
+  per period:
+
+  ```python
+  client.execute(
+      dataset="payments",
+      aggregates=[{"func": "count", "field": "*", "alias": "failures"}],
+      filters=[{"field": "status", "operator": "eq", "value": "failed"}],
+      group_by=[{"field": "created_at", "bucket": "quarter", "alias": "quarter"}],
+      order_by={"column": "quarter"},
+      purpose="Failed payments per quarter",
+  )
+  ```
+
+  Bucketing a fully or partially masked field is denied, like grouping by it. Needs a
+  control plane with time buckets (vaultkit#106); older ones reject the request.
 - `having`: needs an aggregate expression such as `SUM(amount)`, not an alias.
 - `order_by`: a field, an aggregate alias or an aggregate expression, `asc` (default) or `desc`.
 - `fields` can be omitted for a single total, e.g. `aggregates=[{"func": "count", "field": "*"}]`.

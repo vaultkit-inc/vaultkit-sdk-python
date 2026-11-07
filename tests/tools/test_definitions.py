@@ -118,7 +118,10 @@ def test_query_tool_def_advertises_analytics():
     assert aggregates["items"]["properties"]["func"]["enum"] == ["count", "sum", "avg", "min", "max"]
     assert aggregates["items"]["required"] == ["func", "field"]
 
-    assert props["group_by"]["items"] == {"type": "string"}
+    group_by = props["group_by"]["items"]["oneOf"]
+    assert group_by[0] == {"type": "string"}
+    assert group_by[1]["properties"]["bucket"]["enum"] == ["day", "week", "month", "quarter", "year"]
+    assert group_by[1]["required"] == ["field", "bucket"]
 
     having = props["having"]["items"]
     assert having["properties"]["operator"]["enum"] == ["gt", "lt", "eq", "gte", "lte"]
@@ -135,3 +138,11 @@ def test_query_tool_def_keeps_dataset_as_the_only_required_input():
 
 def test_query_tool_def_says_joins_are_not_supported():
     assert "joins are not supported" in query_tool_def()["description"]
+
+
+def test_query_tool_def_steers_trends_to_one_bucketed_query():
+    tool = query_tool_def()
+
+    assert "ONE query that groups by a time bucket" in tool["description"]
+    example = tool["input_schema"]["properties"]["group_by"]["description"]
+    assert "{field: 'created_at', bucket: 'quarter', alias: 'quarter'}" in example

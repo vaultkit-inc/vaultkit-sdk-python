@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from vaultkit.utils.validation import TIME_BUCKETS
+
 
 def discover_tool_def(
     *,
@@ -110,6 +112,25 @@ def query_tool_def(
         "required": ["logic", "conditions"],
     }
 
+    time_bucket = {
+        "type": "object",
+        "properties": {
+            "field": {"type": "string", "description": "A timestamp or date field of the dataset."},
+            "bucket": {"type": "string", "enum": list(TIME_BUCKETS)},
+            "alias": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "Name of the result column (default <field>_<bucket>). Use it in order_by.",
+            },
+            "timezone": {
+                "type": "string",
+                "description": "IANA time zone the periods start in, e.g. 'America/Toronto'. Default UTC.",
+            },
+        },
+        "required": ["field", "bucket"],
+        "additionalProperties": False,
+    }
+
     return {
         "name": "vaultkit_query",
         "description": (
@@ -117,6 +138,8 @@ def query_tool_def(
             "sensitive fields may be masked and some datasets require approval before data is returned. "
             "Supports aggregation (count/sum/avg/min/max), grouping, having and sorting on a single dataset; "
             "joins are not supported. "
+            "For a trend over time (per day, week, month, quarter or year), send ONE query that groups by a "
+            "time bucket of a timestamp field, not one query per period. "
             "Returns data or a pending status if approval is required."
         ),
         "input_schema": {
@@ -173,10 +196,17 @@ def query_tool_def(
                 },
                 "group_by": {
                     "type": "array",
-                    "items": {"type": "string"},
+                    "items": {"oneOf": [{"type": "string"}, time_bucket]},
                     "description": (
-                        "Fields to group by. Optional: defaults to 'fields'. If given, it must include "
-                        "every entry in 'fields'."
+                        "Fields to group by, or time buckets of a timestamp or date field. Optional: "
+                        "defaults to 'fields'. If given, it must include every entry in 'fields'; a "
+                        "bucketed field is not listed in 'fields'.\n\n"
+                        "Example, failed payments per quarter in one query: "
+                        "fields: [], aggregates: [{func: 'count', field: '*', alias: 'failures'}], "
+                        "filters: [{field: 'status', operator: 'eq', value: 'failed'}], "
+                        "group_by: [{field: 'created_at', bucket: 'quarter', alias: 'quarter'}], "
+                        "order_by: {column: 'quarter'}. Each row has the quarter's start date and its count. "
+                        "Mix with plain fields: group_by: ['status', {field: 'created_at', bucket: 'month'}]."
                     ),
                 },
                 "having": {
@@ -203,7 +233,7 @@ def query_tool_def(
                     "properties": {
                         "column": {
                             "type": "string",
-                            "description": "A field, an aggregate alias, or an aggregate expression.",
+                            "description": "A field, an aggregate or time bucket alias, or an aggregate expression.",
                         },
                         "direction": {"type": "string", "enum": ["asc", "desc"], "default": "asc"},
                     },

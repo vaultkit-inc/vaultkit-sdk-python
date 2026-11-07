@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from vaultkit.core.http import HttpClient, HttpConfig
 from vaultkit.core.polling import PollConfig, poll_until_done
@@ -103,7 +103,7 @@ class VaultKitClient:
         filters: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
         aggregates: Optional[List[Dict[str, Any]]] = None,
-        group_by: Optional[List[str]] = None,
+        group_by: Optional[List[Union[str, Dict[str, str]]]] = None,
         having: Optional[List[Dict[str, Any]]] = None,
         order_by: Optional[Dict[str, Any]] = None,
         purpose: Optional[str] = None,
@@ -118,6 +118,11 @@ class VaultKitClient:
             aggregates  [{"func": "sum", "field": "amount", "alias": "total"}]
                         func is one of count, sum, avg, min, max; "*" only with count.
             group_by    ["region"] — every field in `fields` must be listed when given.
+                        A time bucket of a timestamp or date field groups by period:
+                        {"field": "created_at", "bucket": "quarter", "alias": "quarter",
+                         "timezone": "America/Toronto"}; bucket is one of day, week,
+                        month, quarter, year; alias and timezone (default UTC) are
+                        optional. One bucketed query replaces one query per period.
             having      [{"field": "SUM(amount)", "operator": "gt", "value": 1000}]
                         field must be an aggregate expression, not an alias.
             order_by    {"column": "total", "direction": "desc"}
@@ -240,7 +245,7 @@ class VaultKitClient:
         filters: Optional[List[Dict[str, Any]]] = None,
         limit: Optional[int] = None,
         aggregates: Optional[List[Dict[str, Any]]] = None,
-        group_by: Optional[List[str]] = None,
+        group_by: Optional[List[Union[str, Dict[str, str]]]] = None,
         having: Optional[List[Dict[str, Any]]] = None,
         order_by: Optional[Dict[str, Any]] = None,
         purpose: Optional[str] = None,
