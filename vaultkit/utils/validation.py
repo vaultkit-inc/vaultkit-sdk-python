@@ -131,17 +131,62 @@ def validate_aggregates(value: Optional[Any]) -> Optional[list]:
     return value
 
 
+# Units a group_by time bucket can use. The control plane checks the field is
+# a timestamp or date column and that the time zone exists.
+TIME_BUCKETS = ("day", "week", "month", "quarter", "year")
+TIME_BUCKET_KEYS = {"field", "bucket", "alias", "timezone"}
+
+
 def validate_group_by(value: Optional[Any]) -> Optional[list]:
     if value is None:
         return None
 
-    if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+    if not isinstance(value, list):
         raise ValidationError(
-            "group_by must be a list of field names",
+            "group_by must be a list of field names or time buckets",
             context=ErrorContext(raw=value),
         )
 
+    for entry in value:
+        if isinstance(entry, dict):
+            _validate_time_bucket(entry)
+        elif not (isinstance(entry, str) and entry.strip()):
+            raise ValidationError(
+                "group_by must be a list of field names or time buckets",
+                context=ErrorContext(raw=value),
+            )
+
     return value
+
+
+def _validate_time_bucket(entry: Dict[str, Any]) -> None:
+    unknown = set(entry) - TIME_BUCKET_KEYS
+    if unknown:
+        raise ValidationError(
+            f"group_by time bucket has unknown keys: {', '.join(sorted(unknown))}",
+            context=ErrorContext(raw=entry),
+        )
+
+    field = entry.get("field")
+    if not isinstance(field, str) or not field.strip():
+        raise ValidationError(
+            "group_by time bucket needs a 'field'",
+            context=ErrorContext(raw=entry),
+        )
+
+    bucket = entry.get("bucket")
+    if not isinstance(bucket, str) or bucket.lower() not in TIME_BUCKETS:
+        raise ValidationError(
+            f"group_by time bucket must be one of {', '.join(TIME_BUCKETS)}",
+            context=ErrorContext(raw=entry),
+        )
+
+    for key in ("alias", "timezone"):
+        if key in entry and not (isinstance(entry[key], str) and entry[key].strip()):
+            raise ValidationError(
+                f"group_by time bucket '{key}' must be a non-empty string",
+                context=ErrorContext(raw=entry),
+            )
 
 
 def validate_having(value: Optional[Any]) -> Optional[list]:
