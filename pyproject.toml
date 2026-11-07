@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vaultkit"
-version = "0.3.1"
+version = "0.4.0"
 description = "VaultKit Python SDK for policy-driven, runtime governed data access"
 authors = [
   { name = "VaultKit", email = "founders@vaultkit.io" }
