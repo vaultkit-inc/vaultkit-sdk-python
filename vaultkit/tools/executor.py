@@ -3,11 +3,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from vaultkit.errors.base import VaultKitError
 from vaultkit.errors.exceptions import (
     ApprovalRequiredError,
+    BusyError,
+    ClientError,
     DeniedError,
     GrantExpiredError,
     GrantRevokedError,
+    NotFoundError,
     PolicyBundleRevokedError,
     QueuedError,
     ValidationError,
@@ -47,6 +51,8 @@ class ToolExecutor:
         try:
             if tool_name == "vaultkit_discover":
                 return self._execute_discover(tool_args)
+            if tool_name == "vaultkit_describe":
+                return self._execute_describe(tool_args)
             if tool_name == "vaultkit_query":
                 return self._execute_query(tool_args)
             if tool_name == "vaultkit_check_approval":
@@ -54,7 +60,7 @@ class ToolExecutor:
 
             return self._error(
                 f"Unknown tool '{tool_name}'. "
-                "Available: vaultkit_discover, vaultkit_query, vaultkit_check_approval.",
+                "Available: vaultkit_discover, vaultkit_describe, vaultkit_query, vaultkit_check_approval.",
                 code="unknown_tool",
             )
         except Exception as e:
@@ -75,6 +81,7 @@ class ToolExecutor:
 
         visibility_map = {
             "allow": "accessible",
+            "mask": "accessible, some fields masked",
             "require_approval": "requires approval",
             "deny": "not accessible",
         }
@@ -91,6 +98,44 @@ class ToolExecutor:
             ],
             "count": len(datasets),
         }
+
+    def _execute_describe(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        dataset = args.get("dataset")
+        if not dataset:
+            return self._error("'dataset' is required for vaultkit_describe.", code="validation_error")
+
+        schema = self._client.schema(dataset)
+
+        fields = []
+        for f in schema.fields:
+            if not isinstance(f, dict) or not f.get("name"):
+                continue
+            access = f.get("visibility") or "allow"
+            field: Dict[str, Any] = {"name": f["name"], "type": f.get("type"), "access": access}
+            if access == "require_approval" and f.get("approver_roles"):
+                field["approvers"] = f["approver_roles"]
+            if f.get("masked"):
+                # Masked whatever the decision: approval doesn't unmask.
+                field["masked"] = f.get("mask") or True
+            if f.get("tenant_column"):
+                field["note"] = "your tenant; filtered automatically"
+            fields.append(field)
+
+        response: Dict[str, Any] = {
+            "status": "ok",
+            "dataset": schema.dataset,
+            "fields": fields,
+            "note": (
+                "Use these exact field names in vaultkit_query. A field needing approval lists its approvers: "
+                "every one of them must sign off. Masked fields return '*****', even after approval, and can't "
+                "be filtered, grouped, sorted or aggregated (count is fine)."
+            ),
+        }
+        if schema.visibility:
+            response["access"] = schema.visibility
+        if schema.tenant_scoped:
+            response["tenant_scoped"] = True
+        return response
 
     def _execute_query(self, args: Dict[str, Any]) -> Dict[str, Any]:
         dataset = args.get("dataset")
@@ -193,8 +238,25 @@ class ToolExecutor:
                 code="bundle_revoked",
             )
 
+        # The request was refused as written (an unknown field, a bad
+        # filter): the server's message says what to fix. Fix the request
+        # rather than retry it.
+        if isinstance(exc, BusyError):
+            response = {"status": "busy", "error": exc.message}
+            if exc.retry_after is not None:
+                response["retry_after_s"] = exc.retry_after
+            return response
+
         if isinstance(exc, ValidationError):
-            return self._error(f"Invalid query: {msg}", code="validation_error")
+            return self._client_error(exc, code="validation_error")
+
+        # Any other 4xx (not found, conflict, forbidden, …): the server's
+        # message as it is, under the error's own code.
+        status_code = getattr(getattr(exc, "context", None), "status_code", None)
+        if isinstance(exc, (NotFoundError, ClientError)) or (
+            isinstance(exc, VaultKitError) and status_code and 400 <= status_code < 500
+        ):
+            return self._client_error(exc, code=error_code)
 
         if isinstance(exc, QueuedError):
             return {"status": "queued", "message": msg, "request_id": exc.request_id}
@@ -202,6 +264,15 @@ class ToolExecutor:
         return self._error(f"Unexpected error: {type(exc).__name__}: {msg}", code=error_code)
 
     # helpers
+
+    @staticmethod
+    def _client_error(exc: Exception, *, code: str) -> Dict[str, Any]:
+        # exc.message, not str(exc): no correlation id appended to the text.
+        response: Dict[str, Any] = {"status": code, "error": getattr(exc, "message", str(exc))}
+        request_id = getattr(getattr(exc, "context", None), "request_id", None)
+        if request_id:
+            response["request_id"] = request_id
+        return response
 
     @staticmethod
     def _error(message: str, *, code: str = "error") -> Dict[str, Any]:

@@ -33,9 +33,10 @@ def _config_from_env() -> McpServerConfig:
     return McpServerConfig(
         environment=os.environ.get("VAULTKIT_ENVIRONMENT", "production"),
         include_discover=_flag("VAULTKIT_MCP_INCLUDE_DISCOVER", True),
+        include_describe=_flag("VAULTKIT_MCP_INCLUDE_DESCRIBE", True),
         include_query=_flag("VAULTKIT_MCP_INCLUDE_QUERY", True),
         include_check_approval=_flag("VAULTKIT_MCP_INCLUDE_CHECK_APPROVAL", True),
-        fetch_schema_hints=_flag("VAULTKIT_MCP_SCHEMA_HINTS", True),
+        fetch_schema_hints=_flag("VAULTKIT_MCP_SCHEMA_HINTS", False),
         default_purpose=os.environ.get("VAULTKIT_MCP_DEFAULT_PURPOSE"),
         default_requester_region=os.environ.get("VAULTKIT_MCP_DEFAULT_REGION"),
     )

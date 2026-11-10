@@ -7,6 +7,7 @@ from .adapters.anthropic import to_anthropic_tool
 from .adapters.openai import to_openai_tool
 from .definitions import (
     check_approval_tool_def,
+    describe_tool_def,
     discover_tool_def,
     query_tool_def,
 )
@@ -26,8 +27,6 @@ class ToolBuilder:
       - Raw: canonical tool defs=[{name,description,input_schema}]
     """
 
-    MAX_SCHEMA_HINTS = 10  # prevent N+1 explosion
-
     def __init__(self, client: "VaultKitClient") -> None:
         self._client = client
 
@@ -37,10 +36,14 @@ class ToolBuilder:
         provider: ToolProvider = ToolProvider.OPENAI,
         environment: str = "production",
         include_discover: bool = True,
+        include_describe: bool = True,
         include_query: bool = True,
         include_check_approval: bool = False,
         datasets: Optional[List[str]] = None,
-        fetch_schema_hints: bool = True,
+        # Off by default: vaultkit_describe lists a dataset's fields when the
+        # agent needs them, instead of every field in the query tool's
+        # description. On, it fetches every dataset's schema at startup.
+        fetch_schema_hints: bool = False,
         requester_region: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         # Build canonical tool defs
@@ -61,6 +64,9 @@ class ToolBuilder:
 
         if include_discover:
             canonical.append(discover_tool_def(dataset_names=resolved_datasets))
+
+        if include_describe:
+            canonical.append(describe_tool_def(dataset_names=resolved_datasets))
 
         if include_query:
             canonical.append(
@@ -113,7 +119,7 @@ class ToolBuilder:
     ) -> Dict[str, List[str]]:
         hints: Dict[str, List[str]] = {}
 
-        for dataset in dataset_names[: self.MAX_SCHEMA_HINTS]:
+        for dataset in dataset_names:
             try:
                 schema = self._client.schema(
                     dataset,

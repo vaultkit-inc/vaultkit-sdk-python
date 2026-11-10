@@ -2,7 +2,7 @@ import pytest
 import httpx
 
 from vaultkit.core.http import HttpClient
-from vaultkit.errors.exceptions import DeniedError, ForbiddenError, TransportError
+from vaultkit.errors.exceptions import DeniedError, ForbiddenError, RateLimitError, TransportError
 
 
 class DummyResponse:
@@ -182,3 +182,18 @@ def test_other_403_stays_forbidden(monkeypatch):
 
     assert not isinstance(exc_info.value, DeniedError)
     assert exc_info.value.message == "token lacks scope"
+
+
+def test_429_carries_retry_after(monkeypatch):
+    client = HttpClient(base_url="http://test", token="token")
+    monkeypatch.setattr(
+        client._client,
+        "request",
+        lambda *a, **k: httpx.Response(429, json={"error": "Too many requests"}, headers={"Retry-After": "5"},
+                                       request=httpx.Request("POST", "http://test/x")),
+    )
+
+    with pytest.raises(RateLimitError) as err:
+        client.post("/x", json_body={})
+
+    assert err.value.context.retry_after == 5.0

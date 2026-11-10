@@ -1,10 +1,12 @@
 import pytest
 
 from vaultkit.core.http import HttpClient
+from vaultkit.models.dataset_schema import DatasetSchema
 from vaultkit.models.fetch_result import FetchResult
 from vaultkit.tools.executor import ToolExecutor
 from vaultkit.errors.exceptions import (
     ApprovalRequiredError,
+    BusyError,
     DeniedError,
     ValidationError,
     QueuedError,
@@ -31,6 +33,25 @@ class DummyClient:
 
     def fetch(self, **kwargs):
         return self._fetch_result
+
+    def schema(self, dataset, **kwargs):
+        return DatasetSchema.from_dict(
+            {
+                "dataset": dataset,
+                "datasource": "northstar",
+                "visibility": "require_approval",
+                "tenant_scoped": True,
+                "fields": [
+                    {"name": "id", "type": "bigint", "visibility": "allow", "masked": False},
+                    {"name": "organization_id", "type": "text", "visibility": "allow", "masked": False,
+                     "tenant_column": True},
+                    {"name": "card_last4", "type": "character", "visibility": "require_approval",
+                     "approver_roles": ["finance_manager", "security"], "masked": False},
+                    {"name": "billing_zip", "type": "text", "visibility": "require_approval",
+                     "approver_roles": ["security"], "masked": True, "mask": "full"},
+                ],
+            }
+        )
 
 
 class DummyDataset:
@@ -322,3 +343,75 @@ def test_query_without_analytics_passes_none(executor):
 
     for key in ("aggregates", "group_by", "having", "order_by"):
         assert calls[key] is None
+
+
+def test_describe(executor):
+    executor, _ = executor
+
+    res = executor.execute("vaultkit_describe", {"dataset": "payment_methods"})
+
+    assert res["status"] == "ok"
+    assert res["access"] == "require_approval"
+    assert res["tenant_scoped"] is True
+    assert "every one of them must sign off" in res["note"]
+    assert res["fields"] == [
+        {"name": "id", "type": "bigint", "access": "allow"},
+        {"name": "organization_id", "type": "text", "access": "allow", "note": "your tenant; filtered automatically"},
+        {"name": "card_last4", "type": "character", "access": "require_approval",
+         "approvers": ["finance_manager", "security"]},
+        {"name": "billing_zip", "type": "text", "access": "require_approval", "approvers": ["security"],
+         "masked": "full"},
+    ]
+
+
+def test_describe_requires_a_dataset(executor):
+    executor, _ = executor
+
+    assert executor.execute("vaultkit_describe", {})["status"] == "validation_error"
+
+
+def _http_error(monkeypatch, status, body):
+    http = HttpClient(base_url="http://test", token="token")
+    monkeypatch.setattr(http._client, "request", lambda *a, **k: _JsonResponse(status, body))
+    return lambda **kwargs: http.post("/intent/requests", json_body={})
+
+
+def test_unknown_field_422_surfaces_the_server_message(executor, monkeypatch):
+    executor, client = executor
+    message = "Unknown fields `brand`, `last4` on `payment_methods`. Valid fields: id, card_brand, card_last4."
+    client.execute = _http_error(monkeypatch, 422, {"error": message, "request_id": "req-1"})
+
+    res = executor.execute("vaultkit_query", {"dataset": "payment_methods", "fields": ["brand", "last4"]})
+
+    assert res == {"status": "validation_error", "error": message, "request_id": "req-1"}
+
+
+def test_hidden_dataset_404_surfaces_the_server_message(executor, monkeypatch):
+    executor, client = executor
+    client.execute = _http_error(monkeypatch, 404, {"error": "Dataset not found", "request_id": "req-2"})
+
+    res = executor.execute("vaultkit_query", {"dataset": "secrets"})
+
+    assert res == {"status": "not_found", "error": "Dataset not found", "request_id": "req-2"}
+
+
+def test_other_4xx_surfaces_the_server_message(executor, monkeypatch):
+    executor, client = executor
+    client.execute = _http_error(monkeypatch, 409, {"error": "Approval was queued under an older bundle"})
+
+    res = executor.execute("vaultkit_query", {"dataset": "payments"})
+
+    assert res == {"status": "conflict", "error": "Approval was queued under an older bundle"}
+
+
+def test_busy_error_says_to_try_again_later(executor):
+    executor, client = executor
+    client._execute_result = BusyError("VaultKit is busy. Try again later (the server asked to wait 2s).", retry_after=2)
+
+    res = executor.execute("vaultkit_query", {"dataset": "users"})
+
+    assert res == {
+        "status": "busy",
+        "error": "VaultKit is busy. Try again later (the server asked to wait 2s).",
+        "retry_after_s": 2,
+    }

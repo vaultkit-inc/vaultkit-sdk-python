@@ -32,6 +32,26 @@ class RateLimitError(VaultKitError):
     retryable = True
 
 
+class BusyError(RateLimitError):
+    """
+    VaultKit stayed busy (429, or 503 with Retry-After) after a few attempts,
+    or asked for a longer wait than the SDK will block for. Try again later.
+    """
+
+    error_code = "busy"
+    retryable = False
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: Optional[float] = None,
+        context: Optional[ErrorContext] = None,
+    ) -> None:
+        super().__init__(message, context=context)
+        self.retry_after = retry_after
+
+
 class TransportError(VaultKitError):
     error_code = "transport_error"
     retryable = True
@@ -180,7 +200,9 @@ def map_http_error(status_code: int, message: str, *, context: ErrorContext) -> 
     # future-proof: allow backend to send structured error types
     error_type = raw.get("type") if isinstance(raw, dict) else None
 
-    if status_code == 400:
+    # 422: the server understood the request and refused it, e.g. an unknown
+    # field ("Unknown field `brand` on `payment_methods`. Valid fields: …").
+    if status_code in (400, 422):
         return ValidationError(message, context=context)
 
     if status_code == 401:
