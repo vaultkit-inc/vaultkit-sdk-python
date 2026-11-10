@@ -9,6 +9,12 @@ class DatasetSchema:
     datasource: str
     fields: List[Dict[str, Any]]
     correlation_id: Optional[str] = None
+    # The strongest decision any field would get (allow, mask,
+    # require_approval), the datasource's environment, and whether rows are
+    # confined to the requester's tenant. None from older control planes.
+    visibility: Optional[str] = None
+    environment: Optional[str] = None
+    tenant_scoped: Optional[bool] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DatasetSchema":
@@ -26,6 +32,9 @@ class DatasetSchema:
             datasource=datasource,
             fields=fields,
             correlation_id=data.get("correlation_id"),
+            visibility=data.get("visibility"),
+            environment=data.get("environment"),
+            tenant_scoped=data.get("tenant_scoped"),
         )
 
     @property
@@ -63,6 +72,9 @@ class DatasetSchema:
 
             if f.get("masked"):
                 parts.append("(masked)")
+
+            if f.get("visibility") == "require_approval":
+                parts.append("(needs approval)")
 
             if f.get("visibility") == "deny":
                 parts.append("(restricted)")

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from .adapters.openai import to_openai_tool
 from .definitions import (
     check_approval_tool_def,
+    describe_tool_def,
     discover_tool_def,
     query_tool_def,
 )
@@ -25,6 +26,10 @@ from .definitions import (
 
 def discover_tool_schema(*, dataset_names: Optional[List[str]] = None) -> Dict[str, Any]:
     return to_openai_tool(discover_tool_def(dataset_names=dataset_names))
+
+
+def describe_tool_schema(*, dataset_names: Optional[List[str]] = None) -> Dict[str, Any]:
+    return to_openai_tool(describe_tool_def(dataset_names=dataset_names))
 
 
 def query_tool_schema(

@@ -4,6 +4,12 @@ from typing import Any, Dict, List, Optional
 
 from vaultkit.utils.validation import TIME_BUCKETS
 
+# Every data tool says it, so an agent reads it whichever tool it looks at
+# first. Guessed field names are refused (422), or worse, sent to approvers.
+DESCRIBE_FIRST = (
+    "Call vaultkit_describe before querying a dataset you haven't described. Never guess field names."
+)
+
 
 def discover_tool_def(
     *,
@@ -11,8 +17,8 @@ def discover_tool_def(
 ) -> Dict[str, Any]:
     description = (
         "Discover datasets available in VaultKit that you are authorized to query. "
-        "Returns dataset names, data sources, and access level (allow/require_approval/deny). "
-        "Call this before vaultkit_query if you are unsure which datasets exist."
+        "Returns dataset names, data sources, and access level (allow/mask/require_approval). "
+        "Call this before vaultkit_query if you are unsure which datasets exist. " + DESCRIBE_FIRST
     )
     if dataset_names:
         description += f" Available datasets include: {', '.join(dataset_names)}."
@@ -43,6 +49,29 @@ def discover_tool_def(
     }
 
 
+def describe_tool_def(
+    *,
+    dataset_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    dataset_prop: Dict[str, Any] = {"type": "string", "description": "The dataset to describe."}
+    if dataset_names:
+        dataset_prop["enum"] = dataset_names
+
+    return {
+        "name": "vaultkit_describe",
+        "description": (
+            "List a dataset's fields with their types, and what a query for each would get: "
+            "allowed, masked, or needing approval (and from whom). Fields you can't see are left out. "
+            + DESCRIBE_FIRST
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"dataset": dataset_prop},
+            "required": ["dataset"],
+        },
+    }
+
+
 def query_tool_def(
     *,
     dataset_names: Optional[List[str]] = None,
@@ -64,16 +93,11 @@ def query_tool_def(
             "description": "The dataset to query (use vaultkit_discover to list options).",
         }
 
-    # Field guidance
-    fields_desc = (
-        "Columns to retrieve. MUST be valid fields for the selected dataset. "
-        "Do NOT invent or guess field names. Only use fields listed below."
-    )
+    # Field guidance: vaultkit_describe lists a dataset's fields. Hints are
+    # only listed here when the caller passes them.
+    fields_desc = "Columns to retrieve, by their exact names as vaultkit_describe lists them. " + DESCRIBE_FIRST
     if schema_hints:
-        field_rules = []
-        for ds, fields in list(schema_hints.items())[:5]:
-            field_rules.append(f"{ds}: {', '.join(fields)}")
-
+        field_rules = [f"{ds}: {', '.join(fields)}" for ds, fields in schema_hints.items()]
         fields_desc += "\n\nVALID FIELDS BY DATASET:\n" + "\n".join(field_rules)
 
     filter_condition = {
@@ -140,7 +164,7 @@ def query_tool_def(
             "joins are not supported. "
             "For a trend over time (per day, week, month, quarter or year), send ONE query that groups by a "
             "time bucket of a timestamp field, not one query per period. "
-            "Returns data or a pending status if approval is required."
+            "Returns data or a pending status if approval is required. " + DESCRIBE_FIRST
         ),
         "input_schema": {
             "$defs": {"filter_group": filter_group},

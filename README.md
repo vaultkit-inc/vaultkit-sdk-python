@@ -125,6 +125,26 @@ result = executor.execute(
 
 See full example: [`examples/agent_openai_demo.py`](examples/agent_openai_demo.py)
 
+The tools, also served by the MCP server (`vaultkit-mcp`):
+
+| Tool | What it does |
+|---|---|
+| `vaultkit_discover` | Lists the datasets the agent can query, with each one's access level. |
+| `vaultkit_describe` | Lists a dataset's fields and types, and what a query for each would get: allowed, masked, or needing approval (and from whom). |
+| `vaultkit_query` | Queries one dataset. |
+| `vaultkit_check_approval` | Checks a request that's waiting for approval, and returns its rows once approved. |
+
+Every tool description tells the agent to call `vaultkit_describe` before querying a
+dataset it hasn't described, and never to guess field names. A request with an unknown
+field comes back as `{"status": "validation_error", "error": "Unknown field `brand` on
+`payment_methods`. Valid fields: …"}`, with the server's message as it is, and isn't
+retried.
+
+Field lists are no longer put in `vaultkit_query`'s description. To get them back, pass
+`fetch_schema_hints=True` to `ToolBuilder.build`, or set `VAULTKIT_MCP_SCHEMA_HINTS=1`
+for the MCP server. Either way, every dataset's schema is fetched when the tools are
+built. `VAULTKIT_MCP_INCLUDE_DESCRIBE=0` leaves `vaultkit_describe` out.
+
 ---
 
 ## Approval Flow

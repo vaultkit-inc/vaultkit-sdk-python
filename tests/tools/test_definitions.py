@@ -1,6 +1,8 @@
 import pytest
 
 from vaultkit.tools.definitions import (
+    DESCRIBE_FIRST,
+    describe_tool_def,
     discover_tool_def,
     query_tool_def,
     check_approval_tool_def,
@@ -146,3 +148,35 @@ def test_query_tool_def_steers_trends_to_one_bucketed_query():
     assert "ONE query that groups by a time bucket" in tool["description"]
     example = tool["input_schema"]["properties"]["group_by"]["description"]
     assert "{field: 'created_at', bucket: 'quarter', alias: 'quarter'}" in example
+
+
+def test_describe_tool_def_structure():
+    tool = describe_tool_def(dataset_names=["payment_methods", "plans"])
+
+    assert tool["name"] == "vaultkit_describe"
+    assert tool["input_schema"]["required"] == ["dataset"]
+    assert tool["input_schema"]["properties"]["dataset"]["enum"] == ["payment_methods", "plans"]
+    assert "approval" in tool["description"]
+
+
+def test_every_data_tool_says_to_describe_first_and_never_guess():
+    for tool in (discover_tool_def(), describe_tool_def(), query_tool_def()):
+        assert DESCRIBE_FIRST in tool["description"]
+    assert DESCRIBE_FIRST == (
+        "Call vaultkit_describe before querying a dataset you haven't described. Never guess field names."
+    )
+
+
+def test_query_tool_def_lists_no_fields_unless_given_hints():
+    fields_desc = query_tool_def(dataset_names=["users"])["input_schema"]["properties"]["fields"]["description"]
+
+    assert "VALID FIELDS" not in fields_desc
+    assert "vaultkit_describe" in fields_desc
+
+
+def test_query_tool_def_lists_hints_for_every_dataset():
+    hints = {f"ds{i}": ["id"] for i in range(8)}
+
+    fields_desc = query_tool_def(schema_hints=hints)["input_schema"]["properties"]["fields"]["description"]
+
+    assert all(f"ds{i}: id" in fields_desc for i in range(8))

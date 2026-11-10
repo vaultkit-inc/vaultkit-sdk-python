@@ -184,6 +184,8 @@ class HttpClient:
 
         ctx = ErrorContext(
             status_code=res.status_code,
+            # The id a refused request was recorded under (Activity), if any.
+            request_id=raw.get("request_id") if isinstance(raw, dict) else None,
             correlation_id=correlation_id,
             raw=raw,
         )

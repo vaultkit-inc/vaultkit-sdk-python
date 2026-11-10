@@ -30,7 +30,7 @@ class MockClient:
 def test_build_raw_with_schema_hints():
     builder = ToolBuilder(MockClient())
 
-    tools = builder.build(provider=ToolProvider.RAW)
+    tools = builder.build(provider=ToolProvider.RAW, fetch_schema_hints=True)
 
     assert len(tools) >= 2
 
@@ -145,3 +145,42 @@ def test_build_minimal():
 
     assert len(tools) == 1
     assert tools[0]["name"] == "vaultkit_query"
+
+
+def test_build_includes_describe_and_lists_no_fields_by_default():
+    tools = ToolBuilder(MockClient()).build(provider=ToolProvider.RAW)
+
+    names = [t["name"] for t in tools]
+    assert names == ["vaultkit_discover", "vaultkit_describe", "vaultkit_query"]
+
+    describe = next(t for t in tools if t["name"] == "vaultkit_describe")
+    assert describe["input_schema"]["properties"]["dataset"]["enum"] == ["users", "orders"]
+
+    fields_desc = next(t for t in tools if t["name"] == "vaultkit_query")["input_schema"]["properties"]["fields"][
+        "description"
+    ]
+    assert "VALID FIELDS" not in fields_desc
+    assert "vaultkit_describe" in fields_desc
+
+
+def test_build_without_describe():
+    tools = ToolBuilder(MockClient()).build(provider=ToolProvider.RAW, include_describe=False)
+
+    assert "vaultkit_describe" not in [t["name"] for t in tools]
+
+
+def test_schema_hints_cover_every_dataset_when_asked_for():
+    class ManyDatasets(MockClient):
+        def datasets(self, **kwargs):
+            return [SimpleNamespace(dataset=f"ds{i}", datasource="pg") for i in range(12)]
+
+        def schema(self, dataset, **kwargs):
+            return SimpleNamespace(field_summaries=[f"{dataset}_id"], field_names=[f"{dataset}_id"])
+
+    tools = ToolBuilder(ManyDatasets()).build(provider=ToolProvider.RAW, fetch_schema_hints=True)
+
+    fields_desc = next(t for t in tools if t["name"] == "vaultkit_query")["input_schema"]["properties"]["fields"][
+        "description"
+    ]
+    for i in range(12):
+        assert f"ds{i}: ds{i}_id" in fields_desc

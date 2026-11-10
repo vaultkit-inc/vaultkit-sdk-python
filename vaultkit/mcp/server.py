@@ -43,14 +43,15 @@ class McpServerConfig:
 
     environment: str = "production"
     include_discover: bool = True
+    include_describe: bool = True
     include_query: bool = True
     # check_approval is exposed by default: the approval flow is asynchronous,
     # so the agent needs a way to poll a pending request to completion.
     include_check_approval: bool = True
-    # Schema hints feed the agent the exact valid field names per dataset, which
-    # guards against field-name hallucination. Keep on unless a very large
-    # catalog makes startup slow.
-    fetch_schema_hints: bool = True
+    # Schema hints list every dataset's fields in vaultkit_query's description,
+    # fetched at startup. Off by default: agents call vaultkit_describe for the
+    # datasets they use, which keeps the tool descriptions short.
+    fetch_schema_hints: bool = False
     # Optional fallbacks if an agent omits them (agents normally supply purpose).
     default_purpose: Optional[str] = None
     default_requester_region: Optional[str] = None
@@ -85,6 +86,7 @@ def build_server(resolver: ClientResolver, config: Optional[McpServerConfig] = N
                 provider=ToolProvider.RAW,
                 environment=cfg.environment,
                 include_discover=cfg.include_discover,
+                include_describe=cfg.include_describe,
                 include_query=cfg.include_query,
                 include_check_approval=cfg.include_check_approval,
                 fetch_schema_hints=cfg.fetch_schema_hints,

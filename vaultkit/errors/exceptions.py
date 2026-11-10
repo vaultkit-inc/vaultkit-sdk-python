@@ -180,7 +180,9 @@ def map_http_error(status_code: int, message: str, *, context: ErrorContext) -> 
     # future-proof: allow backend to send structured error types
     error_type = raw.get("type") if isinstance(raw, dict) else None
 
-    if status_code == 400:
+    # 422: the server understood the request and refused it, e.g. an unknown
+    # field ("Unknown field `brand` on `payment_methods`. Valid fields: …").
+    if status_code in (400, 422):
         return ValidationError(message, context=context)
 
     if status_code == 401:
