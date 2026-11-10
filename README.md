@@ -140,6 +140,13 @@ field comes back as `{"status": "validation_error", "error": "Unknown field `bra
 `payment_methods`. Valid fields: …"}`, with the server's message as it is, and isn't
 retried.
 
+When VaultKit is busy (`429`, or `503` with `Retry-After`), the SDK waits as long as
+`Retry-After` says, backing off if it stays busy. After a few attempts
+(`RetryConfig.max_attempts`, default 3) it raises `BusyError`: "VaultKit is busy. Try again
+later." Tools return it as `{"status": "busy", ...}`. A `Retry-After` longer than
+`RetryConfig.max_retry_after_s` (default 30 s) raises `BusyError` at once instead of
+blocking.
+
 Field lists are no longer put in `vaultkit_query`'s description. To get them back, pass
 `fetch_schema_hints=True` to `ToolBuilder.build`, or set `VAULTKIT_MCP_SCHEMA_HINTS=1`
 for the MCP server. Either way, every dataset's schema is fetched when the tools are

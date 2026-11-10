@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Callable
+import email.utils
 import logging
 
 import httpx
@@ -188,6 +190,25 @@ class HttpClient:
             request_id=raw.get("request_id") if isinstance(raw, dict) else None,
             correlation_id=correlation_id,
             raw=raw,
+            retry_after=parse_retry_after(res.headers.get("retry-after")),
         )
 
         raise map_http_error(res.status_code, msg, context=ctx)
+
+
+def parse_retry_after(value: Optional[str]) -> Optional[float]:
+    """Retry-After as seconds: a number of seconds, or an HTTP date."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        when = email.utils.parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())

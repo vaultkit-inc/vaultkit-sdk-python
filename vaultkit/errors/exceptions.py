@@ -32,6 +32,26 @@ class RateLimitError(VaultKitError):
     retryable = True
 
 
+class BusyError(RateLimitError):
+    """
+    VaultKit stayed busy (429, or 503 with Retry-After) after a few attempts,
+    or asked for a longer wait than the SDK will block for. Try again later.
+    """
+
+    error_code = "busy"
+    retryable = False
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: Optional[float] = None,
+        context: Optional[ErrorContext] = None,
+    ) -> None:
+        super().__init__(message, context=context)
+        self.retry_after = retry_after
+
+
 class TransportError(VaultKitError):
     error_code = "transport_error"
     retryable = True

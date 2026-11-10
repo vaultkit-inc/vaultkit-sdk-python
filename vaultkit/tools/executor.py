@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from vaultkit.errors.base import VaultKitError
 from vaultkit.errors.exceptions import (
     ApprovalRequiredError,
+    BusyError,
     ClientError,
     DeniedError,
     GrantExpiredError,
@@ -240,6 +241,12 @@ class ToolExecutor:
         # The request was refused as written (an unknown field, a bad
         # filter): the server's message says what to fix. Fix the request
         # rather than retry it.
+        if isinstance(exc, BusyError):
+            response = {"status": "busy", "error": exc.message}
+            if exc.retry_after is not None:
+                response["retry_after_s"] = exc.retry_after
+            return response
+
         if isinstance(exc, ValidationError):
             return self._client_error(exc, code="validation_error")
 

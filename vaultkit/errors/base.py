@@ -10,6 +10,8 @@ class ErrorContext:
     request_id: Optional[str] = None
     correlation_id: Optional[str] = None
     raw: Optional[Any] = None
+    # Seconds the server asked us to wait (Retry-After), if it said.
+    retry_after: Optional[float] = None
 
 
 class VaultKitError(Exception):

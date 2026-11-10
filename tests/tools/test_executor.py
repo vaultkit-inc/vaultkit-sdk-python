@@ -6,6 +6,7 @@ from vaultkit.models.fetch_result import FetchResult
 from vaultkit.tools.executor import ToolExecutor
 from vaultkit.errors.exceptions import (
     ApprovalRequiredError,
+    BusyError,
     DeniedError,
     ValidationError,
     QueuedError,
@@ -401,3 +402,16 @@ def test_other_4xx_surfaces_the_server_message(executor, monkeypatch):
     res = executor.execute("vaultkit_query", {"dataset": "payments"})
 
     assert res == {"status": "conflict", "error": "Approval was queued under an older bundle"}
+
+
+def test_busy_error_says_to_try_again_later(executor):
+    executor, client = executor
+    client._execute_result = BusyError("VaultKit is busy. Try again later (the server asked to wait 2s).", retry_after=2)
+
+    res = executor.execute("vaultkit_query", {"dataset": "users"})
+
+    assert res == {
+        "status": "busy",
+        "error": "VaultKit is busy. Try again later (the server asked to wait 2s).",
+        "retry_after_s": 2,
+    }
