@@ -120,10 +120,12 @@ class ApprovalRequiredError(VaultKitError):
         message: str,
         *,
         request_id: Optional[str] = None,
+        approval_progress: Optional[str] = None,
         context: Optional[ErrorContext] = None,
     ) -> None:
         super().__init__(message, context=context)
         self.request_id = request_id
+        self.approval_progress = approval_progress
 
 
 class GrantExpiredError(VaultKitError):

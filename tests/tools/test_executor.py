@@ -81,10 +81,11 @@ class _JsonResponse:
 
 
 class DummyQueryResult:
-    def __init__(self, status, grant_ref=None, reason=None):
+    def __init__(self, status, grant_ref=None, reason=None, approval_progress=None):
         self.status = status
         self.grant_ref = grant_ref
         self.reason = reason
+        self.approval_progress = approval_progress
 
     @property
     def is_granted(self):
@@ -353,7 +354,7 @@ def test_describe(executor):
     assert res["status"] == "ok"
     assert res["access"] == "require_approval"
     assert res["tenant_scoped"] is True
-    assert "every one of them must sign off" in res["note"]
+    assert "says who must sign off" in res["note"]
     assert res["fields"] == [
         {"name": "id", "type": "bigint", "access": "allow"},
         {"name": "organization_id", "type": "text", "access": "allow", "note": "your tenant; filtered automatically"},
@@ -415,3 +416,43 @@ def test_busy_error_says_to_try_again_later(executor):
         "error": "VaultKit is busy. Try again later (the server asked to wait 2s).",
         "retry_after_s": 2,
     }
+
+
+def test_describe_passes_on_the_approval_wording_and_aggregate_access(executor):
+    executor, client = executor
+    client.schema = lambda dataset, **kw: DatasetSchema.from_dict({
+        "dataset": dataset, "datasource": "northstar", "visibility": "require_approval",
+        "fields": [{"name": "amount_cents", "type": "bigint", "visibility": "require_approval",
+                    "approver_roles": ["finance_manager", "security"],
+                    "approval": "Needs 1 approval: finance_manager", "aggregate_visibility": "allow"}],
+    })
+
+    field = executor.execute("vaultkit_describe", {"dataset": "refunds"})["fields"][0]
+
+    assert field == {"name": "amount_cents", "type": "bigint", "access": "require_approval",
+                     "approval": "Needs 1 approval: finance_manager", "aggregate_access": "allow"}
+
+
+def test_check_approval_pending_passes_on_the_progress(executor):
+    executor, client = executor
+    client._poll_result = DummyQueryResult("pending")
+    client._poll_result.approval_progress = "Needs 2 approvals: finance_manager ✓ Ada, security waiting"
+
+    res = executor.execute("vaultkit_check_approval", {"request_id": "r1"})
+
+    assert res["approval"] == "Needs 2 approvals: finance_manager ✓ Ada, security waiting"
+    assert res["message"] == (
+        "Approval is still pending. Needs 2 approvals: finance_manager ✓ Ada, security waiting. Try again shortly."
+    )
+
+
+def test_pending_approval_passes_on_what_it_needs(executor):
+    executor, client = executor
+    client._execute_result = ApprovalRequiredError(
+        "need approval", request_id="r1", approval_progress="Needs 2 approvals: finance_manager waiting, security waiting"
+    )
+
+    res = executor.execute("vaultkit_query", {"dataset": "payments"})
+
+    assert res["approval"] == "Needs 2 approvals: finance_manager waiting, security waiting"
+    assert "Needs 2 approvals: finance_manager waiting, security waiting." in res["message"]

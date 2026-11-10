@@ -112,8 +112,17 @@ class ToolExecutor:
                 continue
             access = f.get("visibility") or "allow"
             field: Dict[str, Any] = {"name": f["name"], "type": f.get("type"), "access": access}
-            if access == "require_approval" and f.get("approver_roles"):
-                field["approvers"] = f["approver_roles"]
+            if access == "require_approval":
+                # "Needs 2 approvals: finance_manager and security"
+                if f.get("approval"):
+                    field["approval"] = f["approval"]
+                elif f.get("approver_roles"):
+                    field["approvers"] = f["approver_roles"]
+            if f.get("aggregate_visibility"):
+                # Decided differently when a query only counts, sums, averages or groups by it.
+                field["aggregate_access"] = f["aggregate_visibility"]
+                if f.get("aggregate_approval"):
+                    field["aggregate_approval"] = f["aggregate_approval"]
             if f.get("masked"):
                 # Masked whatever the decision: approval doesn't unmask.
                 field["masked"] = f.get("mask") or True
@@ -126,9 +135,10 @@ class ToolExecutor:
             "dataset": schema.dataset,
             "fields": fields,
             "note": (
-                "Use these exact field names in vaultkit_query. A field needing approval lists its approvers: "
-                "every one of them must sign off. Masked fields return '*****', even after approval, and can't "
-                "be filtered, grouped, sorted or aggregated (count is fine)."
+                "Use these exact field names in vaultkit_query. A field needing approval says who must sign off "
+                "(pass that wording on as it is); aggregate_access is what a query that only counts, sums, "
+                "averages or groups by the field gets. Masked fields return '*****', even after approval, and "
+                "can't be filtered, grouped, sorted or aggregated (count is fine)."
             ),
         }
         if schema.visibility:
@@ -189,11 +199,16 @@ class ToolExecutor:
         if poll_result.is_denied:
             return {"status": "denied", "reason": poll_result.reason or "Approval was denied."}
 
-        return {
+        response: Dict[str, Any] = {
             "status": "pending",
             "message": "Approval is still pending. Try again shortly.",
             "request_id": request_id,
         }
+        if poll_result.approval_progress:
+            # "Needs 2 approvals: finance_manager ✓ Ada, security waiting"
+            response["approval"] = poll_result.approval_progress
+            response["message"] = f"Approval is still pending. {poll_result.approval_progress}. Try again shortly."
+        return response
 
     # error translation
 
@@ -216,14 +231,19 @@ class ToolExecutor:
             }
 
         if isinstance(exc, ApprovalRequiredError):
-            return {
+            progress = getattr(exc, "approval_progress", None)
+            response = {
                 "status": "pending_approval",
                 "message": (
                     "This request requires human approval. "
-                    f"Use vaultkit_check_approval with request_id='{exc.request_id}' to check status."
+                    + (f"{progress}. " if progress else "")
+                    + f"Use vaultkit_check_approval with request_id='{exc.request_id}' to check status."
                 ),
                 "request_id": exc.request_id,
             }
+            if progress:
+                response["approval"] = progress
+            return response
 
         if isinstance(exc, (GrantExpiredError, GrantRevokedError)):
             return self._error(

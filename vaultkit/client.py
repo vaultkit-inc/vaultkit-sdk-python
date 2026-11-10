@@ -173,11 +173,12 @@ class VaultKitClient:
                     },
                 )
 
+            needs = result.approval_progress or f"Approver role: {result.approver_role or 'unknown'}"
             raise ApprovalRequiredError(
-                f"Dataset '{dataset}' requires human approval. "
-                f"Approver role: {result.approver_role or 'unknown'}. "
+                f"Dataset '{dataset}' requires human approval. {needs}. "
                 f"Use poll_request('{result.request_id}') to check status.",
                 request_id=result.request_id,
+                approval_progress=result.approval_progress,
             )
 
         if result.is_denied:
