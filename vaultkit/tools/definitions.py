@@ -286,7 +286,9 @@ def check_approval_tool_def() -> Dict[str, Any]:
         "name": "vaultkit_check_approval",
         "description": (
             "Check the approval status of a previously submitted VaultKit query that is pending human approval. "
-            "Returns 'pending', 'approved', or 'denied'. If approved, returns the data."
+            "Returns 'pending', 'approved', or 'denied'. If approved, returns the data. While pending, 'approval' "
+            "says who has signed off and who is still needed (e.g. 'Needs 2 approvals: finance_manager ✓ Ada, "
+            "security waiting'); tell the user exactly that."
         ),
         "input_schema": {
             "type": "object",

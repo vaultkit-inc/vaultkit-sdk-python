@@ -107,3 +107,12 @@ def test_has_data():
     })
 
     assert empty.has_data is False
+
+
+def test_from_dict_reads_approval_progress():
+    result = QueryResult.from_dict({
+        "status": "pending", "request_id": "r1",
+        "approval_progress": "Needs 2 approvals: finance_manager ✓ Ada, security waiting",
+    })
+
+    assert result.approval_progress == "Needs 2 approvals: finance_manager ✓ Ada, security waiting"

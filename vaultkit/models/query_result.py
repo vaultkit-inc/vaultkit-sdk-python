@@ -19,6 +19,9 @@ class QueryResult:
 
     policy_id: Optional[str] = None
     approver_role: Optional[str] = None
+    # Where an approval stands, worded to pass on as it is:
+    # "Needs 2 approvals: finance_manager ✓ Ada, security waiting".
+    approval_progress: Optional[str] = None
 
     correlation_id: Optional[str] = None  # propagated from HTTP layer
 
@@ -45,6 +48,7 @@ class QueryResult:
             meta=data.get("meta"),
             policy_id=data.get("policy_id"),
             approver_role=data.get("approver_role"),
+            approval_progress=data.get("approval_progress"),
             correlation_id=data.get("correlation_id"),
         )
 
